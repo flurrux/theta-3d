@@ -99,7 +99,7 @@ function orthoOrbitToPerspective(cam: PerspectiveOrbitCamera) {
 }
 
 let camera: PerspectiveOrbitCamera = {
-	radius: 40,
+	radius: 60,
 	latitude: 0.52,
 	longitude: -0.82,
 	settings: {
@@ -623,7 +623,7 @@ function addInstructions(){
 				style="
 					position: absolute; 
 					top: 0px; left: 0px; right: 0px; 
-					color: #e7e7e7; font-size: 28px;
+					color: #e7e7e7; font-size: 24px;
 					text-align: center;
 				"
 			>

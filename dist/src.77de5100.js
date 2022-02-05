@@ -3546,7 +3546,7 @@ function orthoOrbitToPerspective(cam) {
 }
 
 var camera = {
-  radius: 40,
+  radius: 60,
   latitude: 0.52,
   longitude: -0.82,
   settings: {
@@ -4158,7 +4158,7 @@ function setupRaycastingControl() {
 }
 
 function addInstructions() {
-  document.body.insertAdjacentHTML("beforeend", "\n\t\t\t<div \n\t\t\t\tid=\"instructions\" \n\t\t\t\tstyle=\"\n\t\t\t\t\tposition: absolute; \n\t\t\t\t\ttop: 0px; left: 0px; right: 0px; \n\t\t\t\t\tcolor: #e7e7e7; font-size: 28px;\n\t\t\t\t\ttext-align: center;\n\t\t\t\t\"\n\t\t\t>\n\t\t\t\t<p>\n\t\t\t\t\tyou can supply your own equation in the developer console!\n\t\t\t\t</p>\n\t\t\t\t<p>\n\t\t\t\t\tpress space to start rendering\n\t\t\t\t</p>\n\t\t\t</div>\n\t\t"); //remove instructions when space is pressed
+  document.body.insertAdjacentHTML("beforeend", "\n\t\t\t<div \n\t\t\t\tid=\"instructions\" \n\t\t\t\tstyle=\"\n\t\t\t\t\tposition: absolute; \n\t\t\t\t\ttop: 0px; left: 0px; right: 0px; \n\t\t\t\t\tcolor: #e7e7e7; font-size: 24px;\n\t\t\t\t\ttext-align: center;\n\t\t\t\t\"\n\t\t\t>\n\t\t\t\t<p>\n\t\t\t\t\tyou can supply your own equation in the developer console!\n\t\t\t\t</p>\n\t\t\t\t<p>\n\t\t\t\t\tpress space to start rendering\n\t\t\t\t</p>\n\t\t\t</div>\n\t\t"); //remove instructions when space is pressed
 
   document.addEventListener("keydown", function (e) {
     if (e.key === " ") {
@@ -4221,7 +4221,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "63410" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "57107" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
