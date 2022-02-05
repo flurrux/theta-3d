@@ -39,7 +39,7 @@ in our case, `[left side] - [right side]` is an expression that contains 3 varia
 
 ```
 function leftSideMinusRightSide(x: number, y: number, z: number): number {
-	...
+  ...
 }
 ```
 
@@ -77,7 +77,7 @@ no complicated calculation required.
 
 more sample plots:  
 
-<img src="./demo-data/blobs-equation.png" style="width: 220px" />
+<img src="./demo-data/blobs-equation.png" style="width: 250px" />
 
 <img src="./demo-data/blobs-plot.jpg" style="width: 400px;" />
 
@@ -85,7 +85,7 @@ more sample plots:
 <div style="height: 30px;"></div>
 
 
-<img src="./demo-data/simple-product-equation.png" style="width: 120px" />
+<img src="./demo-data/simple-product-equation.png" style="width: 150px" />
 
 <img src="./demo-data/simple-product-plot.jpg" style="width: 400px;" />
 
@@ -93,7 +93,7 @@ more sample plots:
 <div style="height: 30px;"></div>
 
 
-<img src="./demo-data/metaball-equation.png" style="width: 300px" />
+<img src="./demo-data/metaball-equation.png" style="width: 350px" />
 
 <img src="./demo-data/metaball.jpg" style="width: 400px;" />
 
@@ -101,14 +101,14 @@ more sample plots:
 <div style="height: 30px;"></div>
 
 
-<img src="./demo-data/scalar-field-equation.png" style="width: 150px" />
+<img src="./demo-data/scalar-field-equation.png" style="width: 180px" />
 
-<img src="./demo-data/scalar-funcs-1.jpg" style="width: 400px;" />
+<img src="./demo-data/sine-scalar-field-plot.jpg" style="width: 400px;" />
 
 
 <div style="height: 30px;"></div>
 
 
-<img src="./demo-data/test-func-1-equation.png" style="width: 300px" />
+<img src="./demo-data/test-func-1-equation.png" style="width: 350px" />
 
-<img src="./demo-data/test-func-1.jpg" style="width: 400px;" />
+<img src="./demo-data/test-plot-1.jpg" style="width: 400px;" />
