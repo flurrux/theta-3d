@@ -1,26 +1,38 @@
-import { filter, map } from 'fp-ts/lib/Array';
-import { identity, pipe } from 'fp-ts/lib/function';
 import { isNone, isSome, none, Option, some } from 'fp-ts/lib/Option';
-import { drawDisc, pathPolygon, pathPolyline } from '../lib/ctx-util';
-import { Morphism, Vector2, Vector3 } from '../lib/types';
+import { drawDisc, pathPolyline } from '../lib/ctx-util';
+import { Morphism, Transformation, Vector2, Vector3 } from '../lib/types';
 import * as Vec3 from '../lib/vec3';
-import * as Vec2 from '../lib/vec2';
 import { OrbitCamera, toRegularCamera } from './camera/orbit-camera';
 import { CameraSettings, PerspectiveCamera } from './camera/perspective-camera';
+import { findFirstZero, raycastSurfaceNormal } from './smooth-equation-casting';
+import { worldPointToCamPoint, worldPointToScreenPoint } from './space-conversion';
 import { interpolate } from './util';
-import { isVoxelBehindCamera } from './voxel/frustum-culling';
-import { createVoxelArraySortFunctionWithCamPosition } from './voxel/occlusion-sorting';
-import { projectVoxelFace } from './voxel/rendering';
-import { VoxelFaceNormal, voxelFaceNormals } from './voxel/voxel-face';
-import { createCameraRay, createPerspectiveRayFromMouse, Ray, raycastVoxel, raycastVoxels } from './voxel/raycasting';
-import { worldPointToScreenPoint } from './space-conversion';
-import { findFirstZero, getIntersectionLine, raycastSurfaceNormal } from './smooth-equation-casting';
+import { createPerspectiveRayFromMouse, Ray } from './voxel/raycasting';
 
 //setup canvas ###
 
-const canvas = document.body.querySelector("canvas");
-const ctx = canvas.getContext("2d");
-const updateCanvasSize = () => {
+function createCtx(){
+	const canvas = document.createElement("canvas");
+	Object.assign(canvas.style, {
+		"position": "absolute"
+	});
+	document.body.appendChild(canvas);
+	return canvas.getContext("2d");
+}
+
+function getCanvasSize(ctx: CanvasRenderingContext2D): Vector2 {
+	const { canvas } = ctx;
+	return [
+		canvas.clientWidth, 
+		canvas.clientHeight
+	]
+}
+
+const backgroundCtx = createCtx();
+const ctx = createCtx();
+
+const updateCanvasSize = (ctx: CanvasRenderingContext2D) => {
+	const { canvas } = ctx;
 	const widthPx = window.innerWidth;
 	const heightPx = window.innerHeight;
 	const scalePx = window.devicePixelRatio || 1;
@@ -32,23 +44,47 @@ const updateCanvasSize = () => {
 		width: widthPx * scalePx,
 		height: heightPx * scalePx
 	});
-	// ctx.setTransform(scalePx, 0, 0, scalePx, 0, 0);
+	ctx.resetTransform();
+	ctx.scale(scalePx, scalePx);
 };
 
 const onresize = () => {
-	updateCanvasSize();
+	updateCanvasSize(ctx);
+	updateCanvasSize(backgroundCtx)
+	const [w, h] = [window.innerWidth, window.innerHeight];
 	camera = {
 		...camera,
 		settings: {
 			...camera.settings,
-			planeWidthHalf: canvas.width / 2,
-			planeHeightHalf: canvas.height / 2,
+			planeWidthHalf: w / 2,
+			planeHeightHalf: h / 2,
 		}
 	};
-	// prepareAndRender();
+	prepareAndRender();
 };
 window.onresize = onresize;
 
+
+function renderCheckerboardPattern(ctx: CanvasRenderingContext2D, cellSize: number){
+	const darkColor = "#262626";
+	const lightColor = "#5c5c5c";
+	const [w, h] = getCanvasSize(ctx);
+	const cellCountX = Math.ceil(w / cellSize);
+	const cellCountY = Math.ceil(h / cellSize);
+	const gridSize = [cellCountX * cellSize, cellCountY * cellSize];
+	ctx.save();
+	ctx.translate(
+		(w - gridSize[0]) / 2, 
+		(h - gridSize[1]) / 2
+	);
+	for (let x = 0; x < cellCountX; x++){
+		for (let y = 0; y < cellCountY; y++) {
+			ctx.fillStyle = (x + y) % 2 === 0 ? darkColor : lightColor;
+			ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+		}
+	}
+	ctx.restore();
+}
 
 
 //camera ###
@@ -63,17 +99,18 @@ function orthoOrbitToPerspective(cam: PerspectiveOrbitCamera) {
 }
 
 let camera: PerspectiveOrbitCamera = {
-	radius: 170,
+	radius: 40,
 	latitude: 0.52,
 	longitude: -0.82,
 	settings: {
-		planeWidthHalf: canvas.width / 2,
-		planeHeightHalf: canvas.height / 2,
+		planeWidthHalf: window.innerWidth / 2,
+		planeHeightHalf: window.innerHeight / 2,
 		zScale: 2000
 	}
 };
 
 function setupOrbitCameraControl() {
+	const { canvas } = ctx;
 	canvas.addEventListener("mousemove", e => {
 		if (e.buttons !== 1) return;
 		const s = 0.01;
@@ -99,17 +136,20 @@ function setupOrbitCameraControl() {
 
 
 const backgroundColor = "#252729";// "#d4d3d2";
-let boxSize = 10;
+let boxSize = 2;
 
 function prepareAndRender() {
+	renderCheckerboardPattern(backgroundCtx, 100);
+
 	const { canvas } = ctx;
-	const [w, h] = [canvas.width, canvas.height];
+	const [w, h] = [canvas.clientWidth, canvas.clientHeight];
 
 	ctx.save();
-	ctx.fillStyle = backgroundColor;
-	ctx.fillRect(0, 0, w, h);
+	// ctx.fillStyle = backgroundColor;
+	// ctx.fillRect(0, 0, w, h);
+	ctx.clearRect(0, 0, w, h);
 	ctx.translate(w / 2, h / 2);
-	ctx.scale(window.devicePixelRatio, -window.devicePixelRatio);
+	ctx.scale(1, -1);
 
 	render();
 
@@ -132,6 +172,8 @@ const boxWireIndices: [number, number][] = [
 	[0, 4], [1, 5], [2, 6], [3, 7]
 ];
 
+
+
 let boxIntersectionLine: Option<[Vector3, Vector3]> = none;
 function renderIntersectionLine(ctx: CanvasRenderingContext2D, cam: PerspectiveCamera) {
 	if (isNone(boxIntersectionLine)) return;
@@ -144,15 +186,41 @@ function renderIntersectionLine(ctx: CanvasRenderingContext2D, cam: PerspectiveC
 	ctx.restore();
 }
 
+
+const isOcclusionEdge = (worldToCam: Transformation<Vector3>, cubeCenter: Vector3) => (vert1: Vector3, vert2: Vector3): boolean => {
+	const edgeCenter = Vec3.interpolate(vert1, vert2, 0.5);
+	let occlusionCount = 0;
+	for (let i = 0; i < 3; i++){
+		const val = edgeCenter[i];
+		if (Math.abs(val) < 1e-5) continue;
+		
+		const faceCenterLocal = [0, 0, 0] as Vector3;
+		faceCenterLocal[i] = val;
+		const faceCenterGlobal = worldToCam(faceCenterLocal);
+		const normalVector = Vec3.subtract(faceCenterGlobal, cubeCenter);
+		if (Vec3.dot(normalVector, faceCenterGlobal) < 0){
+			occlusionCount++;
+		}
+	}
+	return occlusionCount > 1;
+}
+
 function renderWireBox(ctx: CanvasRenderingContext2D, boxSize: number, cam: PerspectiveCamera){
 	ctx.save();
 	ctx.lineWidth = 4;
-	ctx.strokeStyle = "white";
+	ctx.strokeStyle = "#fcba03";
 	const boxSideLength = boxSize * 2 + 1;
 	const boxVerts = unitBoxVerts.map(v => Vec3.multiply(v, boxSideLength));
 	const projectedBoxVerts = boxVerts.map(worldPointToScreenPoint(ctx, cam));
+	// const skipEdge = isOcclusionEdge(cam.transform.position);
+	const skipEdge = isOcclusionEdge(
+		worldPointToCamPoint(cam), 
+		worldPointToCamPoint(cam)([0, 0, 0]),
+	);
 	for (const edgeInds of boxWireIndices) {
-		pathPolyline(ctx, edgeInds.map(i => projectedBoxVerts[i]));
+		const edgeVerts = edgeInds.map(i => projectedBoxVerts[i]);
+		if (skipEdge(boxVerts[edgeInds[0]], boxVerts[edgeInds[1]])) continue;
+		pathPolyline(ctx, edgeVerts);
 		ctx.stroke();
 	}
 	ctx.restore();
@@ -203,21 +271,36 @@ function nextFramePromise(){
 	return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+function renderBackgroundProgressStrip(stripWidth: number, height: number, ctx: CanvasRenderingContext2D){
+	ctx.fillStyle = "teal";
+	ctx.strokeStyle = "white";
+	ctx.fillRect(0, 0, stripWidth, height);
+	ctx.beginPath();
+	ctx.moveTo(stripWidth, 0);
+	ctx.lineTo(stripWidth, height);
+	ctx.lineWidth = 2;
+	ctx.stroke();
+}
+
 async function fillPixelsByRaytracing(
-	ctx: CanvasRenderingContext2D, camera: PerspectiveCamera, raycastFunc: Morphism<Ray, Option<Vector3>>){
+	ctx: CanvasRenderingContext2D, backgroundCtx: CanvasRenderingContext2D, 
+	camera: PerspectiveCamera, raycastFunc: Morphism<Ray, Option<Vector3>>){
 	
-	const canvas = ctx.canvas;
 	const surfaceColor = [255, 255, 255] as Vector3;
 	const lightDirection: Vector3 = Vec3.normalize([0.3, -1, -0.2]);
-	const [w, h] = [canvas.width, canvas.height];
+	const [w, h] = getCanvasSize(ctx);
 	let prevWorkStartTime = window.performance.now();
+	const pixelSize = 1.5;
+
 	for (let x = 0; x < w; x++){
+		renderBackgroundProgressStrip(x, h, backgroundCtx);
 		for (let y = 0; y < h; y++){
 			const workTimeDelta = window.performance.now() - prevWorkStartTime;
 			if (workTimeDelta > 0.2) await nextFramePromise();
 			prevWorkStartTime = window.performance.now()
 
 			const screenPoint = [x, y] as Vector2;
+			
 			const ray = createPerspectiveRayFromMouse(screenPoint, camera);
 			const normalOpt = raycastFunc(ray);
 			if (isNone(normalOpt)) continue;
@@ -229,17 +312,60 @@ async function fillPixelsByRaytracing(
 			);
 			const adjustedColor = surfaceColor.map(c => Math.round(c * brightness)) as Vector3;
 			ctx.fillStyle = `rgb(${adjustedColor.join(",")})`;
-			ctx.fillRect(x, y, 1, 1);
+			ctx.fillRect(x, y, pixelSize, pixelSize);
 		}
 	}
 }
 
 
 type OptVector3 = [Option<number>, Option<number>, Option<number>];
+type OptVector2 = [Option<number>, Option<number>];
+
+type Vec3Func = Morphism<Vector3, Option<number>>;
+type Vec3DerivFunc = Morphism<Vector3, OptVector3>;
+
 type SurfaceEquationAndDeriv = {
-	equationFunc: Morphism<Vector3, Option<number>>,
-	derivFunc: Morphism<Vector3, OptVector3>
+	equationFunc: Vec3Func,
+	derivFunc: Vec3DerivFunc
 };
+
+const measureDerivatives = (func: Vec3Func): Vec3DerivFunc => {
+	const d = 0.0001;
+	return (v: Vector3) => {
+		const measuredDerivs = [none, none, none] as OptVector3;
+		for (let i = 0; i < 3; i++){
+			const p = v.slice() as Vector3;
+			p[i] += d;
+			const [v1, v2] = [func(v), func(p)];
+			if (isNone(v1) || isNone(v2)) continue;
+			const deriv = (v2.value - v1.value) / d;
+			measuredDerivs[i] = some(deriv);
+		}
+		return measuredDerivs;
+	};
+};
+
+
+type ScalarField = (p: Vector2) => Option<number>;
+type ScalarFieldDeriv = (p: Vector2) => OptVector2;
+
+function makeSurfaceEquationAndDerivByScalarField(scalarField: ScalarField, scalarFieldDeriv: ScalarFieldDeriv): SurfaceEquationAndDeriv {
+	const equationFunc = ([x, y, z]: Vector3): Option<number> => {
+		const scalar = scalarField([x, z]);
+		if (isNone(scalar)) return none;
+		return some(scalar.value - y);
+	};
+	const derivFunc = ([x, y, z]: Vector3): OptVector3 => {
+		const subDeriv = scalarFieldDeriv([x, z]);
+		return [
+			subDeriv[0], 
+			some(-1), 
+			subDeriv[1]
+		]
+	};
+	
+	return { equationFunc, derivFunc }
+}
 
 const { sin, cos } = Math;
 
@@ -287,7 +413,7 @@ const inverseProdFuncs: SurfaceEquationAndDeriv = (() => {
 })();
 
 const sphereFuncs: SurfaceEquationAndDeriv = (() => {
-	const rSqrd = 160;
+	const rSqrd = 10;
 	const func: Morphism<Vector3, Option<number>> = (p: Vector3) => {
 		const [x, y, z] = p;
 		return some(x**2 + y**2 + z**2 - rSqrd);
@@ -301,6 +427,23 @@ const sphereFuncs: SurfaceEquationAndDeriv = (() => {
 		]
 	};
 	return { equationFunc: func, derivFunc: deriv };
+})();
+
+const metaBall: SurfaceEquationAndDeriv = (() => {
+	const separation = 2;
+	const func: Morphism<Vector3, Option<number>> = (p: Vector3) => {
+		const [x, y, z] = p;
+		const y2 = y**2;
+		const z2 = z**2;
+
+		const dist1 = (x + separation)**2 + y2 + z2;
+		const dist2 = (x - separation)**2 + y2 + z2;
+		return some((dist1 * dist2) - 18);
+	};
+	return { 
+		equationFunc: func, 
+		derivFunc: measureDerivatives(func) 
+	};
 })();
 
 const blobsFunc: SurfaceEquationAndDeriv = (() => {
@@ -384,18 +527,73 @@ const cylinderFuncs: SurfaceEquationAndDeriv = (() => {
 	return { equationFunc: func, derivFunc: deriv };
 })();
 
+const scalarFieldFuncs1: SurfaceEquationAndDeriv = (() => {
+	const a = 1;
+	const field: ScalarField = ([x, y]) => some(a * Math.sin(x) * Math.sin(y));
+	const deriv: ScalarFieldDeriv = ([x, y]) => [
+		some(a * Math.cos(x) * Math.sin(y)),
+		some(a * Math.sin(x) * Math.cos(y))
+	];
+	return makeSurfaceEquationAndDerivByScalarField(field, deriv);
+})();
+
+const scalarFieldFuncs2: SurfaceEquationAndDeriv = (() => {
+	const a = -2;
+	const field: ScalarField = ([x, y]) => some(a * Math.log(Math.hypot(x, y)) - 0.8);
+	//log((x^2 + y^2)^0.5) -> x * (x^2 + y^2)^(-1)
+	const deriv: ScalarFieldDeriv = ([x, y]) => {
+		const s = a / (x**2 + y**2);
+		return [
+			some(x * s),
+			some(y * s)
+		]
+	};
+	return makeSurfaceEquationAndDerivByScalarField(field, deriv);
+})();
+
+
+let selectedFuncs: SurfaceEquationAndDeriv = metaBall;
+
+(window as any).setEquationFunc = (untypedFunc: any) => {
+	if (typeof(untypedFunc) !== "function"){
+		console.error("supplied argument is not a function!");
+		return;
+	}
+	const safeFunc: Vec3Func = (v) => {
+		const untypedOutput = untypedFunc(v);
+		if (typeof(untypedOutput) !== "number") return none;
+		return some(untypedOutput);
+	};
+	selectedFuncs = {
+		equationFunc: safeFunc,
+		derivFunc: measureDerivatives(safeFunc)
+	};
+	normalFunc = createNormalFunc();
+}
+
 function createNormalFunc(){
-	const funcs: SurfaceEquationAndDeriv = blobsFunc;
-	const boxSize = 10;
+	const funcs: SurfaceEquationAndDeriv = selectedFuncs;
 	const normalFunc = raycastSurfaceNormal(boxSize, funcs.equationFunc, funcs.derivFunc);
 	return normalFunc;
 }
 
+let normalFunc: Morphism<Ray, Option<Vector3>> = createNormalFunc();
+let raytracingActive = false;
+
 function setupRaycastingControl() {
-	const normalFunc = createNormalFunc();
 	document.addEventListener("keypress", e => {
-		fillPixelsByRaytracing(ctx, orthoOrbitToPerspective(camera), normalFunc)
+		if (raytracingActive) return;
+		if (e.key !== " ") return;
+		prepareAndRender();
+		raytracingActive = true;
+		fillPixelsByRaytracing(
+			ctx, backgroundCtx,
+			orthoOrbitToPerspective(camera), normalFunc
+		).then(
+			() => raytracingActive = false
+		)
 	});
+	const { canvas } = ctx;
 	canvas.addEventListener("mousemove", e => {
 		if (!e.ctrlKey) return;
 		const perspectiveCam = orthoOrbitToPerspective(camera);
@@ -416,10 +614,52 @@ function setupRaycastingControl() {
 	});
 }
 
+function addInstructions(){
+	document.body.insertAdjacentHTML(
+		"beforeend",
+		`
+			<div 
+				id="instructions" 
+				style="
+					position: absolute; 
+					top: 0px; left: 0px; right: 0px; 
+					color: #e7e7e7; font-size: 28px;
+					text-align: center;
+				"
+			>
+				<p>
+					you can supply your own equation in the developer console!
+				</p>
+				<p>
+					press space to start rendering
+				</p>
+			</div>
+		`
+	);
+
+	//remove instructions when space is pressed
+	document.addEventListener("keydown", e => {
+		if (e.key === " "){
+			const instructionsDiv = document.querySelector("#instructions");
+			if (!instructionsDiv) return;
+			instructionsDiv.remove();
+		}
+	});
+}
+
+function addConsoleInstructions(){
+	console.log(`here is an example how to write a function.\nlet's say you want to plot the equation x * x = y - z\nsimply subtract the right side from the left and write x * x - (y - z).\nthen call this global function:\nsetEquationFunc([x, y, z] => x * x - y + z);
+	`);
+}
+
 const main = () => {
-	updateCanvasSize();
+	addInstructions();
+	addConsoleInstructions();
+	updateCanvasSize(ctx);
+	updateCanvasSize(backgroundCtx);
 	onresize();
 	setupOrbitCameraControl();
 	setupRaycastingControl();
+	prepareAndRender();
 };
 main();

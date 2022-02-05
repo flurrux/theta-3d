@@ -73,7 +73,18 @@ function foldRaycastResults(results: Option<RaycastResult>[]): Option<RaycastRes
 	)
 }
 
+function isSphereHit(ray: Ray, spherePosition: Vector3, sphereRadius: number): boolean {
+	const rayOriginToSphere = Vec3.subtract(spherePosition, ray.origin);
+	const rayComponent = Vec3.project(
+		Vec3.normalize(ray.vector), 
+		rayOriginToSphere
+	);
+	const orthoDistSqrd = Vec3.sqrdMagnitude(rayOriginToSphere) - Vec3.sqrdMagnitude(rayComponent);
+	return orthoDistSqrd < sphereRadius**2;
+}
+
 export const raycastVoxel = (ray: Ray) => (voxel: Vector3): Option<RaycastResult> => {
+	if (!isSphereHit(ray, [0, 0, 0], 1.75)) return none;
 	const localOrigin = Vec3.subtract(ray.origin, voxel);
 	return foldRaycastResults(
 		voxelFaceNormals.map(
