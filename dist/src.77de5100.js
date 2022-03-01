@@ -4170,7 +4170,7 @@ function addInstructions() {
 }
 
 function addConsoleInstructions() {
-  console.log("here is an example how to write a function.\nlet's say you want to plot the equation x * x = y - z\nsimply subtract the right side from the left and write x * x - (y - z).\nthen call this global function:\nsetEquationFunc([x, y, z] => x * x - y + z);\n\t");
+  console.log("here is an example how to write a function.\nlet's say you want to plot the equation x * x = y - z\nsimply subtract the right side from the left and write x * x - (y - z).\nthen call this global function:\nsetEquationFunc(([x, y, z]) => x * x - y + z);\n\t");
 }
 
 var main = function main() {
