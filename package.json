@@ -1,13 +1,12 @@
 {
   "name": "@flurrux/theta-3d",
   "version": "1.0.0",
-  "description": "like http://thetamath.com/app/ but in 3D and more voxely",
+  "description": "like http://thetamath.com/app/ but in 3D",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "parcel src/index.html",
-    "build": "parcel build src/index.html",
-    "prepublish": "npm run build"
+    "build": "parcel build src/index.html"
   },
   "author": "Christian Hoffmann <christianhoffmann@outlook.com>",
   "license": "ISC",
